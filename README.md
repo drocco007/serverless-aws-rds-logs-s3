@@ -1,7 +1,7 @@
 # serverless-aws-rds-logs-s3
 
-A serverless example demonstrating a periodic scheduled task to ship logs
-from RDS to S3.
+A Serverless Framework example demonstrating a periodic scheduled task to
+ship logs from RDS to S3.
 
 Quick start:
 

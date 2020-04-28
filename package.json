@@ -1,0 +1,11 @@
+{
+  "name": "serverless-aws-rds-logs-s3",
+  "description": "A Serverless Framework example demonstrating a periodic scheduled task to ship logs from RDS to S3.",
+  "version": "0.1.0",
+  "homepage": "https://github.com/drocco007/serverless-aws-rds-logs-s3",
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "devDependencies": {
+    "serverless-python-requirements": "^5.1.0"
+  }
+}
