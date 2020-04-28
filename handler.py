@@ -87,8 +87,9 @@ class RDSLogStreamer:
         metadata instance representing an RDS log file, fetch the
         contents of the flie.
 
-        Generator that yields the log file data in chunks as it is read
-        from RDS.
+        Returns a file-like object opened for reading the log file data.
+
+        Raises on HTTP error status from the server.
 
         """
 
