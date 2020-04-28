@@ -45,6 +45,7 @@ inserts a warning marker into the data stream.
 
 One _could_ write code like this to circumvent this problem
 
+```python
     TRUNCATE_MARKER='[Your log message was truncated]'
 
     def _get_chunk(self, log_file, marker='0', n_lines=3000, retry=True):
@@ -64,6 +65,7 @@ One _could_ write code like this to circumvent this problem
                                    n_lines=n_lines // 2, retry=False)
         else:
             return record
+```
 
 but on balance, one would rather not!
 
@@ -83,6 +85,7 @@ logs from RDS; see the end of this document for additional discussion.
 
 First we define a new S3 bucket resource.
 
+```yaml
     resources:
       Resources:
         RDSLogBucket:
@@ -98,6 +101,7 @@ First we define a new S3 bucket resource.
       bucket:
         live: prod-rds-logs
         stage: stage-rds-logs
+```
 
 As a convenience, we also define a custom `bucket` attribute to hold a
 configurable portion of our S3 bucket name; during the deploy, CloudFormation
@@ -116,8 +120,7 @@ as usual, but also
 * specifies a [_schedule_ event](https://serverless.com/framework/docs/providers/aws/events/schedule/) to trigger the function at intervals of
   5 minutes (think `cron`)
 
-<!-- end list -->
-
+```yaml
     functions:
       sync_s3:
         handler: handler.sync_s3
@@ -143,6 +146,7 @@ We also need to give our function permission to read the RDS logs and
 read and write the S3 bucket, so we'll add those policies to the
 execution role created by Serverless when we deploy:
 
+```yaml
     provider:
       name: aws
       runtime: python3.8
@@ -171,6 +175,7 @@ execution role created by Serverless when we deploy:
               - !Ref AWS::AccountId
               - "db"
               - ${self:custom.db.${self:provider.stage}}
+```
 
 `rds:DescribeDBLogFiles` allows the role to query RDS for the list of log
 files and their sizes; we'll use that later to only sync logs that have
@@ -199,6 +204,7 @@ look at the `sync_s3` function itself. In outline, the function
 
 Here is the function in full:
 
+```python
     def sync_s3(event, context):
         "Sync RDS logs to S3."
 
@@ -224,6 +230,7 @@ Here is the function in full:
             f = streamer.stream(log_file)
 
             obj.upload_fileobj(f)
+```
 
 A couple of helper classes handle bookkeeping chores for us like collecting
 the available logs and their sizes and organizing the destination bucket
@@ -232,6 +239,7 @@ into date-based directories.
 To fetch a log file, we create a signed URL for the REST endpoint and have
 `requests` open the URL for streaming:
 
+```python
     @attr.s
     class RDSLogStreamer:
         def stream(self, log_file):
@@ -245,6 +253,28 @@ To fetch a log file, we create a signed URL for the REST endpoint and have
             response.raw.decode_content = True
 
             return response.raw
+```
 
 
 # Additional context: signing the REST request
+
+Invoking the REST call to retrieve an RDS log file requires that the
+request be signed with credentials for a user or role with the
+`rds:DownloadCompleteDBLogFile` permission. Our goal is to use the
+execution role we created as part of our deployment — and to which we
+carefully added the required permission — to sign the request.
+
+When generating a signed request for a role, we [are required to pass a
+session token](https://docs.aws.amazon.com/STS/latest/APIReference/CommonParameters.html)
+with our request. Fortunately, the Lambda execution environment includes
+[the required keys and session token](https://forums.aws.amazon.com/thread.jspa?threadID=217933)
+as environment variables
+
+    AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY
+    AWS_SESSION_TOKEN
+
+To generate the signed request, our service packages a [lightly customized
+version of the SigV4 signing example](https://docs.aws.amazon.com/general/latest/gr/sigv4-signed-request-examples.html#sig-v4-examples-get-query-string), tailored
+for the RDS endpoint we need and assuming role-based authentication with
+a session token.
