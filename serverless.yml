@@ -1,0 +1,80 @@
+service: serverless-aws-rds-logs-s3
+
+
+# The serverless-python-requirements plugin bundles additional Python
+# requirements into your Lambda function's execution environment.
+#
+# https://serverless.com/plugins/serverless-python-requirements/
+plugins:
+  - serverless-python-requirements
+
+
+provider:
+  name: aws
+  runtime: python3.8
+  stage: ${opt:stage, "stage"}
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 's3:ListBucket'
+      Resource: !GetAtt RDSLogBucket.Arn
+    - Effect: 'Allow'
+      Action:
+        - 's3:GetObject'
+        - 's3:PutObject'
+      Resource: !Join ["", [!GetAtt RDSLogBucket.Arn, "/*"]]
+    - Effect: Allow
+      Action:
+        - rds:DownloadCompleteDBLogFile
+      Resource: '*'
+    - Effect: Allow
+      Action:
+        - rds:DescribeDBLogFiles
+      Resource: !Join
+        - ":"
+        - - "arn:aws:rds"
+          - !Ref AWS::Region
+          - !Ref AWS::AccountId
+          - "db"
+          - ${self:custom.db.${self:provider.stage}}
+
+
+functions:
+  sync_s3:
+    handler: handler.sync_s3
+    timeout: 600
+    memorySize: 256
+    environment:
+      DBNAME: ${self:custom.db.${self:provider.stage}}
+      TARGET_BUCKET: !Ref RDSLogBucket
+    events:
+     - schedule: rate(5 minutes)
+
+
+resources:
+  Resources:
+    RDSLogBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Join
+          - "-"
+          - - !Ref AWS::AccountId
+            - "${self:custom.bucket.${self:provider.stage}}"
+            - !Ref AWS::Region
+
+  Outputs:
+    RDSLogBucket:
+      Description: The S3 bucket log files will sync to
+      Value: !Ref RDSLogBucket
+
+
+custom:
+  bucket:
+    live: prod-rds-logs
+    stage: stage-rds-logs
+  db:
+    live: prod-rds
+    stage: stage-rds
+  pythonRequirements:
+    dockerizePip: true
+    dockerImage: python:3.8-alpine
